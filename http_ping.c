@@ -38,6 +38,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <setjmp.h>
+#include "master.h"
 
 #ifdef USE_SSL
 #include <openssl/ssl.h>
@@ -49,6 +50,7 @@
 
 #define INTERVAL 5
 #define TIMEOUT 15
+#define COUNT_MAX 5
 
 #define max(a,b) ((a)>=(b)?(a):(b))
 #define min(a,b) ((a)<=(b)?(a):(b))
@@ -124,7 +126,7 @@ static SSL_CTX* ssl_ctx = (SSL_CTX*) 0;
 #endif
 
 
-/* Forwards. */
+
 static void usage( void );
 static void parse_url( void );
 static void init_net( void );
@@ -139,7 +141,7 @@ static long long delta_timeval( struct timeval* start, struct timeval* finish );
 
 
 int
-main( int argc, char** argv )
+http_ping( int argc, char** argv )
     {
     int argn;
     float elapsed_total, elapsed_connect, elapsed_response, elapsed_data;
@@ -235,7 +237,7 @@ main( int argc, char** argv )
     for (;;)
 	{
 	(void) setjmp( jb );
-	if ( count == 0 || terminate || count_started==5 )
+	if ( count == 0 || terminate || count_started==COUNT_MAX )
 	    break;
 	if ( count > 0 )
 	    --count;
@@ -306,7 +308,7 @@ main( int argc, char** argv )
 	(void) printf(
 	    "data     min/avg/max = %g/%g/%g ms\n",
 	    min_data, sum_data / count_completed, max_data );*/
-		f=fopen("C:/cygwin64/home/Fabio/Progetti/http_ping/response.txt", "a");
+		f=fopen("C:/Windows/temp/temp.txt", "a");
 		if(f==NULL)
 			return -1;
 		
@@ -314,8 +316,9 @@ main( int argc, char** argv )
 		flock(fd,LOCK_EX);
 		fprintf(f,"%g %g %g %s\r\n",min_response, sum_response / count_completed,max_response, argv[1] );
 		fflush(f);
-		flock(fd, LOCK_UN);
 		fclose(f);
+		flock(fd, LOCK_UN);
+		return 0;
 	}
 
     /* Done. */

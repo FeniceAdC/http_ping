@@ -1,0 +1,448 @@
+diff -ubwrN ./http_ping_org/http_ping.c ./http/http_ping.c
+--- ./http_ping_org/http_ping.c	2016-03-09 15:46:21.000000000 +0100
++++ ./http/http_ping.c	2017-03-01 17:43:57.088578800 +0100
+@@ -38,6 +38,7 @@
+ #include <errno.h>
+ #include <signal.h>
+ #include <setjmp.h>
++#include "master.h"
+ 
+ #ifdef USE_SSL
+ #include <openssl/ssl.h>
+@@ -49,6 +50,7 @@
+ 
+ #define INTERVAL 5
+ #define TIMEOUT 15
++#define COUNT_MAX 5
+ 
+ #define max(a,b) ((a)>=(b)?(a):(b))
+ #define min(a,b) ((a)<=(b)?(a):(b))
+@@ -108,6 +110,7 @@
+ static int do_proxy;
+ static char* proxy_host;
+ static unsigned short proxy_port;
++FILE * f;
+ 
+ static int terminate;
+ static int count_started, count_completed, count_failures, count_timeouts;
+@@ -123,7 +126,7 @@
+ #endif
+ 
+ 
+-/* Forwards. */
++
+ static void usage( void );
+ static void parse_url( void );
+ static void init_net( void );
+@@ -138,7 +141,7 @@
+ 
+ 
+ int
+-main( int argc, char** argv )
++http_ping( int argc, char** argv )
+     {
+     int argn;
+     float elapsed_total, elapsed_connect, elapsed_response, elapsed_data;
+@@ -234,7 +237,7 @@
+     for (;;)
+ 	{
+ 	(void) setjmp( jb );
+-	if ( count == 0 || terminate )
++	if ( count == 0 || terminate || count_started==COUNT_MAX )
+ 	    break;
+ 	if ( count > 0 )
+ 	    --count;
+@@ -258,10 +261,10 @@
+ 		elapsed_data =
+ 		    delta_timeval( &response_at, &finished_at ) / 1000.0;
+ 		if ( ! quiet )
+-		    (void) printf(
++		    /*(void) printf(
+ 			"%ld bytes from %s: %g ms (%gc/%gr/%gd)\n",
+ 			bytes, url, elapsed_total, elapsed_connect,
+-			elapsed_response, elapsed_data );
++			elapsed_response, elapsed_data );*/
+ 		min_total = min( min_total, elapsed_total );
+ 		min_connect = min( min_connect, elapsed_connect );
+ 		min_response = min( min_response, elapsed_response );
+@@ -279,20 +282,21 @@
+ 	alarm( 0 );
+ 	if ( count == 0 || terminate )
+ 	    break;
+-	sleep( interval );
++	//sleep( interval );
+ 	}
++	/* Writing of statistics in the "response.txt" file and printing of them*/
+ 
+     /* Report statistics. */
+-    (void) printf( "\n" );
+-    (void) printf( "--- %s http_ping statistics ---\n", url );
++    ///(void) printf( "\n" );
++    /*(void) printf( "--- %s http_ping statistics ---\n", url );
+     (void) printf(
+ 	"%d fetches started, %d completed (%d%%), %d failures (%d%%), %d timeouts (%d%%)\n",
+ 	count_started, count_completed, count_completed * 100 / count_started,
+ 	count_failures, count_failures * 100 / count_started,
+-	count_timeouts, count_timeouts * 100 / count_started );
++	count_timeouts, count_timeouts * 100 / count_started );*/
+     if ( count_completed > 0 )
+ 	{
+-	(void) printf(
++	/*(void) printf(
+ 	    "total    min/avg/max = %g/%g/%g ms\n",
+ 	    min_total, sum_total / count_completed, max_total );
+ 	(void) printf(
+@@ -303,7 +307,18 @@
+ 	    min_response, sum_response / count_completed, max_response );
+ 	(void) printf(
+ 	    "data     min/avg/max = %g/%g/%g ms\n",
+-	    min_data, sum_data / count_completed, max_data );
++	    min_data, sum_data / count_completed, max_data );*/
++		f=fopen("C:/Windows/temp/temp.txt", "a");
++		if(f==NULL)
++			return -1;
++		
++		int fd=fileno(f);
++		flock(fd,LOCK_EX);
++		fprintf(f,"%g %g %g %s\r\n",min_response, sum_response / count_completed,max_response, argv[1] );
++		fflush(f);
++		fclose(f);
++		flock(fd, LOCK_UN);
++		return 0;
+ 	}
+ 
+     /* Done. */
+@@ -672,7 +687,7 @@
+ 	    return 1;
+ 	    }
+ 
+-	for ( bytes_handled = 0; bytes_handled < bytes_read; ++bytes_handled )
++	for ( bytes_handled = 0; bytes_handled <= bytes_read; ++bytes_handled )
+ 	    {
+ 	    switch ( conn_state )
+ 		{
+I file binari ./http_ping_org/http_ping.exe e ./http/http_ping.exe sono diversi
+diff -ubwrN ./http_ping_org/http_ping.h ./http/http_ping.h
+--- ./http_ping_org/http_ping.h	1970-01-01 01:00:00.000000000 +0100
++++ ./http/http_ping.h	2017-03-01 16:29:15.676639600 +0100
+@@ -0,0 +1,16 @@
++#include <unistd.h>
++#include <stdlib.h>
++#include <stdio.h>
++#include <string.h>
++#include <fcntl.h>
++#include <sys/types.h>
++#include <sys/time.h>
++#include <sys/socket.h>
++#include <netinet/in.h>
++#include <netdb.h>
++#include <errno.h>
++#include <signal.h>
++#include <setjmp.h>
++
++
++int http_ping( int a, char** b);
+I file binari ./http_ping_org/http_ping.o e ./http/http_ping.o sono diversi
+diff -ubwrN ./http_ping_org/main.c ./http/main.c
+--- ./http_ping_org/main.c	1970-01-01 01:00:00.000000000 +0100
++++ ./http/main.c	2017-03-01 18:01:13.438707000 +0100
+@@ -0,0 +1,98 @@
++#include <stdio.h>
++#include <unistd.h>
++#include <stdlib.h>
++#include <string.h>
++#include <float.h>
++#include <sys/types.h>
++#include <sys/wait.h>
++#include <sys/file.h>
++#include "master.h"
++#include "http_ping.h"
++
++int main(int argc, char** argv )
++{	
++	pid_t pid = 0;
++	int status;
++	Stat *b=alloca_stat(argc-2);//Allocate the space for a number of structure Stat equal to the number of address writed in the command line 
++	int i,e,j;
++	FILE *r;
++	int rcv=0;
++	int k=0;
++	char *http = "http://";
++	int http_len=strlen(http);
++	
++	/*Selection of the mode inserted by the user among the average, minimum and maximum options*/
++	if((argc<2) || ((strcmp(argv[1], "-avg")  != 0) && (strcmp(argv[1], "-min" ) != 0) && (strcmp(argv[1], "-max")!= 0)))
++	{
++		printf("Errore nell'inserimento\n");
++		return 0;
++	}
++	else	//Only if the I have an adrress and one command like: avg, min or max 
++	{
++		if(strcmp(argv[1],"-avg")==0)//Selecting mode
++			e=0;
++		else if(strcmp(argv[1],"-min")==0)
++			e=1;
++		else
++			e=2;
++		printf("%d",e);
++		for(i=2; i!=argc; i++)
++		{
++			if(strncmp(http,argv[i],http_len))//Evaluate whether the ith address has been entered correctly
++			{
++				printf("Errore nell'inserimento dell'indirizzo: %s\n\n", argv[i]);
++				k++;
++				continue;
++			}
++			
++			pid = fork(); //Span a child process
++			if (pid < 0)
++			{
++				printf("Cannot fork!!\n");
++				exit(1);
++			}
++			if (pid == 0)
++			{		
++				
++				http_ping(2,&argv[i]);	
++				exit(0);				
++			}
++		}
++		//Father process
++		while(1)
++		{
++			wait(&status);
++			rcv++;
++
++			r=fopen("C:/Windows/temp/temp.txt", "r");
++			if(r==NULL)
++			{
++				return -1;
++				printf("Error in file opening\n");
++			}
++			printf("\n\t------------Results------------\n\n");
++			int fd=fileno(r);
++			flock(fd,LOCK_EX);
++			for(j=0;  feof(r)==0; j++)
++			{
++				fscanf(r, "%lf",&b[j].response_min);   
++				fscanf(r, "%lf",&b[j].response_avg);
++				fscanf(r, "%lf",&b[j].response_max);
++				fscanf(r, "%s", b[j].address);
++				b[j].mode=e;
++			}
++			flock(fd, LOCK_UN);
++			fclose(r);
++			best_response(b,rcv-1,e);
++			if(rcv==argc-2)
++			{
++				fclose(fopen("C:/Windows/temp/temp.txt", "w"));
++				dealloca_stat(b);
++				break;
++			}			
++		}	
++	}
++}
++
++
++
+I file binari ./http_ping_org/main.o e ./http/main.o sono diversi
+diff -ubwrN ./http_ping_org/Makefile ./http/Makefile
+--- ./http_ping_org/Makefile	2014-08-11 21:13:31.000000000 +0200
++++ ./http/Makefile	2017-03-01 16:32:48.040714500 +0100
+@@ -1,37 +1,17 @@
+-# Makefile for http_ping
++# Project: multiple http_ping
+ 
+-# CONFIGURE: If you are using a SystemV-based operating system, such as
+-# Solaris, you will need to uncomment this definition.
+-#SYSV_LIBS =	-lnsl -lsocket
+-
+-# CONFIGURE: If you want to compile in support for https, uncomment these
+-# definitions.  You will need to have already built OpenSSL, available at
+-# http://www.openssl.org/  Make sure the SSL_TREE definition points to the
+-# tree with your OpenSSL installation - depending on how you installed it,
+-# it may be in /usr/local instead of /usr/local/ssl.
+-#SSL_TREE =	/usr/local/ssl
+-#SSL_DEFS =	-DUSE_SSL
+-#SSL_INC =	-I$(SSL_TREE)/include
+-#SSL_LIBS =	-L$(SSL_TREE)/lib -lssl -lcrypto
+-
+-
+-BINDIR =	/usr/local/bin
+-MANDIR =	/usr/local/man/man1
+-CC =		cc
+-CFLAGS =	-O $(SRANDOM_DEFS) $(SSL_DEFS) $(SSL_INC) -ansi -pedantic -U__STRICT_ANSI__ -Wall -Wpointer-arith -Wshadow -Wcast-qual -Wcast-align -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Wredundant-decls -Wno-long-long
+-LDFLAGS =	-s $(SSL_LIBS) $(SYSV_LIBS)
+-
+-all:		http_ping
+-
+-http_ping:	http_ping.c port.h
+-	$(CC) $(CFLAGS) http_ping.c $(LDFLAGS) -o http_ping
+-
+-
+-install:	all
+-	rm -f $(BINDIR)/http_ping
+-	cp http_ping $(BINDIR)
+-	rm -f $(MANDIR)/http_ping.1
+-	cp http_ping.1 $(MANDIR)
++CFLAGS=-Wall -O2 -Werror
+ 
+-clean:
+-	rm -f http_ping *.o core core.* *.core
++all: master
++	
++master:  master.o main.o http_ping.o
++	cc $(CFLAGS) http_ping.o master.o main.o -o master
++	
++main.o: main.c master.h http_ping.h
++	cc $(CFLAGS) -c main.c
++	
++master.o:   master.c master.h 
++	cc $(CFLAGS) -c master.c
++
++http_ping.o:   http_ping.c http_ping.h  master.h 
++	cc $(CFLAGS) -c http_ping.c
+\ Manca newline alla fine del file
+diff -ubwrN ./http_ping_org/master.c ./http/master.c
+--- ./http_ping_org/master.c	1970-01-01 01:00:00.000000000 +0100
++++ ./http/master.c	2017-02-02 23:19:18.949044000 +0100
+@@ -0,0 +1,109 @@
++#include <stdio.h>
++#include <unistd.h>
++#include <stdlib.h>
++#include <string.h>
++#include <float.h>
++#include "master.h"
++
++/*Callback used in the qsort function, that compares the statistics, according to the choice (selection of avg, min or max) made by the user.*/
++int compare(Stat *a,Stat *b)
++{
++	switch (a->mode)
++	{
++		case 0:
++			if (a->response_avg <  b->response_avg) return -1;
++			if (a->response_avg == b->response_avg) return 0;
++			if (a->response_avg >  b->response_avg) return 1;
++			break;
++			
++		case 1:
++			if (a->response_min <  b->response_min) return -1;
++			if (a->response_min == b->response_min) return 0;
++			if (a->response_min >  b->response_min) return 1;
++			break;
++			
++		case 2:
++			if (a->response_max <  b->response_max) return -1;
++			if (a->response_max == b->response_max) return 0;
++			if (a->response_max >  b->response_max) return 1;
++			break;
++	}
++	return 2;
++}
++
++/*Function that computes what is the Internet address with the best average/minimum/maximum response time, according to the choice made by the user*/ 
++void best_response(Stat *a, int n, int ch)
++{
++	int i=0;
++	int q;
++	double tmp;
++   	int k=0;
++	switch (ch){		
++		case 0:
++			tmp=a[0].response_avg;
++			for(i=0;i<n; ++i)
++			{
++				if(a[i].response_avg<tmp)
++				{
++					tmp=a[i].response_avg;
++					k=i;
++				}
++			}
++			printf("L'indirizzo con il minimo tempo medio di risposta e': %s\n\n", a[k].address);
++			printf("Gli indirizzi ordinati per tempo medio di risposta risultano:\n\n");
++			qsort((void*)a,n, sizeof(Stat), (void*)compare);
++			for(q=0; q<n; q++)
++				printf("%d) min: %g / avg: %g / max: %g indirizzo: %s\n", q+1,a[q].response_min,a[q].response_avg, a[q].response_max,a[q].address);
++			break;
++		
++		case 1:
++			tmp=a[0].response_min;
++			for(i=0;i<n; ++i)
++			{
++				if(a[i].response_min<tmp)
++				{
++					tmp=a[i].response_min;
++					k=i;
++				}
++			}
++			printf("L'indirizzo con il tempo minimo di risposta e': %s\n\n", a[k].address);
++			printf("Gli indirizzi ordinati per tempo minimo di risposta risultano:\n\n");
++			qsort((void*)a,n, sizeof(Stat), (void*)compare);
++			for(q=0; q<n; q++)
++				printf("%d) min: %g / avg: %g / max: %g indirizzo: %s\n", q+1,a[q].response_min,a[q].response_avg, a[q].response_max,a[q].address);
++			break;
++		
++		case 2:
++			tmp=a[0].response_max;
++			for(i=0;i<n; ++i)
++			{
++				if(a[i].response_max<tmp)
++				{
++					tmp=a[i].response_max;
++					k=i;
++				}
++			}
++			printf("L'indirizzo con il minore tempo massimo di risposta e': %s\n\n", a[k].address);
++			printf("Gli indirizzi ordinati per tempo massimo di risposta risultano:\n\n");
++			qsort((void*)a,n, sizeof(Stat), (void*)compare);
++			for(q=0; q<n; q++)
++				printf("%d) min: %g / avg: %g / max: %g indirizzo: %s\n", q+1,a[q].response_min,a[q].response_avg, a[q].response_max,a[q].address);
++			break;
++	}		
++}
++
++/*Function that allocates the statistics structure*/
++Stat* alloca_stat(int dim)
++{
++	Stat *c;
++	c=(Stat*)malloc(dim*sizeof(Stat));
++	if(c==NULL)
++		return 0;
++	return c;
++}
++
++void dealloca_stat(Stat *c)
++{
++	free(c);
++	return;
++}
+\ Manca newline alla fine del file
+diff -ubwrN ./http_ping_org/master.h ./http/master.h
+--- ./http_ping_org/master.h	1970-01-01 01:00:00.000000000 +0100
++++ ./http/master.h	2017-03-01 16:31:12.594836800 +0100
+@@ -0,0 +1,23 @@
++#include <stdio.h>
++#include <unistd.h>
++#include <stdlib.h>
++#include <string.h>
++#include <float.h>
++
++
++/*Structure for the management of the statistics obtained by the multiple execution of the http_ping function*/
++typedef struct Stat{
++	double response_min; // Minimum computed response time 
++	double response_avg; // Average computed response time
++	double response_max; // Maximum computed response time
++	int mode; /*Mode that is chosen by the user, when he executes the program (Three possible choices: -avg for the ordering according to the average of response
++	          times, -min for the ordering according to the minimum of the response times and -max for the ordering according to the maximum of response times)*/
++	char address[100]; //Variable for storing the website address
++}Stat;
++
++int compare(Stat *a,Stat *b); 
++void best_response(Stat *a, int n, int ch);
++Stat* alloca_stat(int dim);
++void dealloca_stat(Stat *c);
++int http_ping( int a, char** b);
++ 
+\ Manca newline alla fine del file
+I file binari ./http_ping_org/master.o e ./http/master.o sono diversi

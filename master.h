@@ -4,8 +4,9 @@
 #include <string.h>
 #include <float.h>
 
+
 /*Structure for the management of the statistics obtained by the multiple execution of the http_ping function*/
-typedef struct stat{
+typedef struct Stat{
 	double response_min; // Minimum computed response time 
 	double response_avg; // Average computed response time
 	double response_max; // Maximum computed response time
@@ -18,3 +19,5 @@ int compare(Stat *a,Stat *b);
 void best_response(Stat *a, int n, int ch);
 Stat* alloca_stat(int dim);
 void dealloca_stat(Stat *c);
+int http_ping( int a, char** b);
+ 
